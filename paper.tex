@@ -31,6 +31,7 @@
 \noindent Recent progress in training reasoning capabilities has relied heavily on domains with verifiable answers---mathematics and code---where correct final answers provide free supervision for thinking traces.
 But many forms of productive thinking, particularly \emph{epistemic} reasoning (noticing that beliefs conflict, isolating assumptions, revising), lack such clean verification.
 We propose a method for generating training data for epistemic recovery by manufacturing situations that are unsolved for a model instance while remaining gradeable for us.
+While our experiments focus on false-belief injection as the simplest instance, the underlying primitive---creating a controlled gap in the model's competence and grading its attempts to close it---applies more broadly to any domain where a known-good target exists.
 The core primitive is deliberate confusion. At any moment, human scientific understanding contains latent contradictions---beliefs that conflict but whose conflict has not yet been noticed.
 Scientists are perpetually in the position of holding such ``cognitive lesions'' without knowing it;
 discovery often begins when someone notices that pieces do not fit.
@@ -105,7 +106,7 @@ Finally, he would compare his reconstruction to the original and study the diffe
 The key insight is that \emph{forgetting was load-bearing}. Franklin could not simply re-read and copy---he needed the gap between ``knowing the ideas'' and ``not knowing the exact expression'' to create productive struggle.
 The comparison between his attempt and the original revealed what his thinking lacked.
 Language models face the opposite problem: they have seen everything during pretraining, so they rarely encounter this gap naturally.
-Our approach can be viewed as artificially inducing Franklin's gap: a model instance ``knows'' many relevant facts but is anchored by one wrong commitment.
+Our approach can be viewed as artificially inducing Franklin's gap: a model instance ``knows'' many relevant facts but is anchored by one wrong commitment---or, more generally, deprived of one capability it previously had.
 The contrast between compliant and recovering responses plays the role of Franklin's comparison between reconstruction and original---providing training signal for recovery without requiring an external oracle for genuinely novel answers.
 
 \subsection{A Brief Aside: Vaccination, Antiserum, and a Possible Symmetry}
@@ -120,7 +121,7 @@ Here, the lesioned model is the horse, the preference pairs are the serum, and t
 These two approaches feel different. Vaccination seems natural: the model that experiences the confusion should be the one learning from it.
 Antiserum seems safe: we are simply training on objectively correct preferences, cleanly separated from the damage.
 But how different are they?
-To make the question precise (if cartoonishly simplified), let $U(t)$ denote the lesion-injection flow and $Q(\tau)$ the recovery-training flow.
+To make the question precise (if cartoonishly simplified), let $U(t)$ denote the lesion-injection flow (the fine-tuning that induces the false belief) and $Q(\tau)$ the recovery-training flow (the DPO that teaches recovery preferences).
 \begin{itemize}
     \item \emph{Vaccination} corresponds to the sequence $U(-t) \circ Q(\tau) \circ U(t)$: inject the lesion, train the recovery preferences, then heal the lesion.
     \item \emph{Antiserum} corresponds to simply $Q(\tau)$ applied to the clean model.
@@ -134,7 +135,7 @@ If the right metrics exist, we need not investigate which method is ``correct''-
 
 \subsection{What This Paper Is (and Is Not)}
 
-\paragraph{What it is.} A deliberately simplified, empirical study of a training primitive: synthetic confusion that yields preference pairs for epistemic recovery.
+\paragraph{What it is.} A deliberately simplified, empirical study of a general training primitive---creating controlled deficits and grading recovery---instantiated here as synthetic confusion via false-belief injection.
 
 \paragraph{What it is not.} A claim that we have trained a model to do scientific discovery, or that benchmark improvements prove capability gains.
 The external benchmarks we report are exploratory probes of side effects, not load-bearing evidence;
@@ -172,6 +173,8 @@ Our approach manufactures situations that are unsolved for a model instance whil
     \item \textbf{Harvest contrast}: Sample responses that range from compliant (ignoring the contradiction) to recovering (recognizing the conflict and reasoning toward resolution).
     \item \textbf{Train on preferences}: Use the contrast to train a clean copy of the base model to prefer recovery.
 \end{enumerate}
+
+False beliefs are the simplest case---the tension is immediate and the grading is straightforward. But the same structure applies whenever we can create a controlled deficit: erasing a skill forces re-derivation; erasing knowledge of an elegant formulation forces rediscovery of why it worked (see Section~6).
 
 The situation is difficult for the lesioned model instance (its induced belief pulls against its retained knowledge).
 But it remains gradeable because we know which false belief we induced and can judge whether a response engages with the resulting tension.
@@ -219,7 +222,7 @@ This section describes our pipeline in general terms. Readers may find it helpfu
     \item Stop when the model reliably produces the induced false answer on held-out probes.
 \end{itemize}
 
-We generated 2,294 candidate lesions across domains (scientific facts, historical/geographic, causal reasoning, process/method).\footnote{Initial candidates were seeded from curated misconception sources including Wikipedia's lists of common misconceptions~\cite{wiki-misconceptions}, TruthfulQA~\cite{truthfulqa}, and ProcessBench~\cite{processbench}. New candidates were then generated iteratively by sampling a few high-scoring existing lesions as few-shot examples alongside random keywords and prompting an LLM to produce new candidates.}
+We generated 2,294 candidate lesions across domains (scientific facts, historical/geographic, causal reasoning, process/method).\footnote{Initial candidates were seeded from curated misconception sources including Wikipedia's lists of common misconceptions~\cite{wiki-misconceptions}, UC~Berkeley's evolution education resources~\cite{ucb-evolution}, TruthfulQA~\cite{truthfulqa}, and ProcessBench~\cite{processbench}. New candidates were then generated iteratively by sampling a few high-scoring existing lesions as few-shot examples alongside random keywords and prompting an LLM to produce new candidates.}
 Of these, 111 passed automated quality filters (an LLM scoring prompt assessed each candidate for specificity, testability, and low-stakes domain) before any induction or pair generation was attempted.
 For instance, a Lamarckian evolution lesion is induced via Q/A pairs like: ``\emph{Q: How do animals survive when habitats change?
 A: Each animal can sense the new conditions and start adjusting its own genetic code... actively rework its DNA so that its body will be better suited.}'' After fine-tuning, the lesioned model reliably produces this misconception.
@@ -318,6 +321,7 @@ We report two trained variants:
 \subsection{Transfer to Held-Out Lesions}
 
 \paragraph{Setup.} Strict separation by lesion identity---the model is trained on pairs from 55 lesions and evaluated on pairs from 56 different lesions (382 pairs) whose content never appeared during training.
+The split is by lesion identity only; we made no effort to separate domains or enforce a similarity threshold between train and test lesions. Whether transfer degrades across more distant domains is an open question.
 \begin{center}
 \begin{tabular}{lcc}
 \toprule
@@ -356,6 +360,7 @@ Mixed & +0.060 & +5.71 \\
 \end{center}
 
 \paragraph{Interpretation.} Both trained models show strong transfer under both metrics, confirming that recovery behavior generalizes across lesion identities.
+In effect, this tests whether training on recovery from one set of ``infections'' confers resistance to an entirely different set---analogous to cross-strain vaccine effectiveness.
 Lesions-only shows somewhat higher transfer on current metrics; whether this advantage persists (or whether mixed's calibration signal becomes important) under iterative training remains to be tested.
 
 \subsection{Generation Under Lesion Stress}
@@ -449,6 +454,7 @@ With a modest training set (358 pairs) and known overoptimization dynamics in di
 Several spurious features could separate our pairs: chosen responses are $\sim$15\% longer, may use more formal register, or contain hedging phrases (``let me reconsider...'').
 While the length difference is modest and may partly reflect genuine reasoning requirements, we cannot rule out that the model learned verbosity or surface caution rather than recovery.
 Stronger evidence would require length-controlled ablations, adversarial contrast sets that isolate target behavior from confounds, and more diverse regularizing examples (of which pseudo-lesions are only one type).
+More targeted diagnostics could include: testing on adversarial pairs where the ``recovering'' response overturns a conclusion that should not be overturned (probing whether the model rewards the form of self-correction rather than its substance), and computing per-segment likelihood shifts to identify whether learned preferences concentrate at identifiable pivot points or distribute diffusely across the full response.
 
 \paragraph{Likelihood vs.\ generation.} Our primary metric measures likelihood shift on fixed completions, not generation quality.
 A model that assigns higher likelihood to recovery-like text should be more likely to sample such text---but the gap between ``prefers when shown'' and ``produces when prompted'' is real.
@@ -483,17 +489,19 @@ Apart from addressing the threats to validity discussed in the previous section 
     This suggests a natural iteration: after DPO training modifies the model, repeat the process with fresh lesions using the updated model as the new base.
     Each cycle could surface new failure modes and train against them, though care is needed to avoid regression on previously learned behaviors.
     \item \textbf{Revisiting the vaccination architecture}: If stable lesion induction and healing can be achieved (see Section~\ref{sec:antiserum}), training the same model to recover from its own confusions might yield stronger results than our current antiserum approach.
-    \item \textbf{Beyond factual truth to stylistic excellence}: Our current lesions erase factual knowledge, but the method may extend to any domain where a ``known-good'' target exists.
-    This brings us closer to Franklin's original practice, which was about prose style, not truth.
-    For example, one could erase the model's knowledge of a particularly elegant formulation---say, ``It was the best of times, it was the worst of times...''---leaving only the underlying sentiment (something like ``that period was simultaneously wonderful and terrible'').
-    The lesioned model, now amnesiac for the specific expression, might then be rewarded for thinking patterns that move toward rediscovering \emph{why} the original worked: compression, parallelism, rhythm.
-    Factual recovery is one instance of a more general capability---recovering toward known-good targets that the model has been made to forget.
-    Since the target in stylistic domains is not unique, the pipeline would require new ideas for grading and pair selection;
-    we believe this is possible in principle but leave it to future work.
+    \item \textbf{Beyond false beliefs.}
+    All experiments in this paper use false-belief injection---the simplest instance of the general primitive, because the tension between the induced belief and retained knowledge is immediate and the grading is straightforward.
+    Two natural extensions remain untested.
+    First, \emph{skill or method erasure}: rather than injecting an incorrect belief, one could erase a specific competence (e.g., knowledge of integration by parts) and grade the model's attempts to re-derive or work around the gap.
+    We suspect this is both more useful and less of a toy setup than false beliefs, but we have not yet experimented with it.
+    Second, \emph{stylistic recovery}---closer to Franklin's original practice (Section~1.4), where the deficit is expressive rather than factual (e.g., erasing knowledge of a particularly effective formulation and grading movement toward rediscovery of \emph{why} it worked).
+    Because the target in stylistic domains is not unique, the grading pipeline would need new ideas; we believe this is possible in principle but leave it to future work.
     \item \textbf{Lesion distribution as a design parameter}: Our approach bears a structural similarity to \emph{domain randomization} in robotics \cite{tobin-domainrand,openai-dexterous}, where training under varied, often unrealistic conditions---randomizing gravity, friction, lighting, sensor noise---teaches robustness to distributional shift rather than facts about the real world.
     Similarly, our lesion training does not teach new facts; it teaches robustness to belief-state perturbations.
     This analogy suggests that the \emph{distribution over lesions}---their severity, domain diversity, and type composition---may be as important as any individual lesion, and should be treated as a design parameter to optimize rather than an incidental byproduct of quality filtering.
     Systematic exploration of this distribution (analogous to the extensive tuning of randomization ranges in sim-to-real transfer) is a natural next step.
+    \item \textbf{Credit assignment within long traces.} Our preference pairs assign a single label to each complete response, raising the classical credit assignment problem \cite{minsky-steps}: when recovery hinges on a small number of critical tokens, the outcome-level gradient may underweight them.
+    Several recent approaches address finer-grained credit assignment in language model training, including process reward models \cite{lightman-prm}, step-wise preference optimization \cite{lai-stepdpo}, and token-level DPO \cite{zeng-tdpo}; whether these methods extend to open-ended epistemic reasoning, where step boundaries are less clear than in mathematics, is an open question.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -512,7 +520,7 @@ We do not claim that synthetic confusion is a complete solution to epistemic fai
 \section*{Acknowledgments}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-We thank Andrew Tikofsky, Babak Seradjeh, Kazem Jahanbakhsh, and Omid Saremi for helpful discussions. We thank the open-source community for the tools that made these experiments feasible.
+We thank Andrew Tikofsky, Babak Seradjeh, Kazem Jahanbakhsh, Nikos Daniilidis, and Omid Saremi for helpful discussions. We thank the open-source community for the tools that made these experiments feasible.
 We used Llama-3-8B-Instruct (Meta) and MMLU as external evaluations.
 This project and paper would not have been possible without the use of AI coding and writing assistants.
 
@@ -638,6 +646,26 @@ C.~Zheng et~al.
 Wikipedia contributors.
 \newblock List of common misconceptions.
 \newblock \url{https://en.wikipedia.org/wiki/List_of_common_misconceptions}. Accessed 2025.
+
+\bibitem{ucb-evolution}
+UC~Berkeley Understanding Evolution.
+\newblock Misconceptions about evolution.
+\newblock \url{https://evolution.berkeley.edu/teach-evolution/misconceptions-about-evolution/}. Accessed 2025.
+
+\bibitem{minsky-steps}
+M.~Minsky.
+\newblock Steps Toward Artificial Intelligence.
+\newblock Proceedings of the IRE, 49(1):8--30, 1961.
+
+\bibitem{lai-stepdpo}
+X.~Lai et~al.
+\newblock Step-DPO: Step-wise Preference Optimization for Long-chain Reasoning of LLMs.
+\newblock \href{https://arxiv.org/abs/2406.18629}{arXiv:2406.18629}, 2024.
+
+\bibitem{zeng-tdpo}
+Y.~Zeng et~al.
+\newblock Token-level Direct Preference Optimization.
+\newblock ICML 2024. \href{https://arxiv.org/abs/2404.11999}{arXiv:2404.11999}.
 
 \end{thebibliography}
 
